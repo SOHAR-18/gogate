@@ -1,0 +1,60 @@
+version: "3.9"
+
+services:
+
+  # ── Gateway ──────────────────────────────
+  gateway:
+    build:
+      context: ../../
+      dockerfile: deployments/docker/Dockerfile.gateway
+    ports:
+      - "8080:8080"
+    env_file:
+      - ../../.env
+    depends_on:
+      - user-service
+      - product-service
+      - order-service
+      - redis
+    networks:
+      - gogate-network
+
+  # ── Microservices ─────────────────────────
+  user-service:
+    build:
+      context: ../../
+      dockerfile: deployments/docker/Dockerfile.user
+    ports:
+      - "8081:8081"
+    networks:
+      - gogate-network
+
+  product-service:
+    build:
+      context: ../../
+      dockerfile: deployments/docker/Dockerfile.product
+    ports:
+      - "8082:8082"
+    networks:
+      - gogate-network
+
+  order-service:
+    build:
+      context: ../../
+      dockerfile: deployments/docker/Dockerfile.order
+    ports:
+      - "8083:8083"
+    networks:
+      - gogate-network
+
+  # ── Redis ─────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - gogate-network
+
+networks:
+  gogate-network:
+    driver: bridge
