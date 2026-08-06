@@ -8,6 +8,7 @@ RUN go build -o gateway cmd/gateway/main.go
 FROM alpine:latest
 WORKDIR /app
 COPY --from=builder /app/gateway .
+COPY configs/ configs/
 COPY .env .
 EXPOSE 8080
 CMD ["./gateway"]
