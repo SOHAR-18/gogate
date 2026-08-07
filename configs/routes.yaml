@@ -1,15 +1,18 @@
-routes:
+﻿routes:
   - path: /users
     upstream: http://user-service:8081
     strip_prefix: false
     timeout: 30
+    protected: true
 
   - path: /products
     upstream: http://product-service:8082
     strip_prefix: false
     timeout: 30
+    protected: false
 
   - path: /orders
     upstream: http://order-service:8083
     strip_prefix: false
     timeout: 30
+    protected: true

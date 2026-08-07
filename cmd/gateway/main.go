@@ -1,4 +1,4 @@
-package main
+﻿package main
 
 import (
 	"encoding/json"
@@ -7,9 +7,10 @@ import (
 	"os"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
+	chiMiddleware "github.com/go-chi/chi/v5/middleware"
 	"gopkg.in/yaml.v3"
 
+	"github.com/SOHAR-18/gogate/internal/auth"
 	"github.com/SOHAR-18/gogate/internal/config"
 	"github.com/SOHAR-18/gogate/internal/proxy"
 )
@@ -32,24 +33,43 @@ func main() {
 		log.Fatalf("Failed to create reverse proxy: %v", err)
 	}
 
+	authMiddleware := auth.NewAuthMiddleware(
+		cfg.JWTSecret,
+		cfg.RedisHost,
+		cfg.RedisPort,
+		cfg.RedisPassword,
+	)
+
 	r := chi.NewRouter()
-	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
-	r.Use(middleware.RequestID)
+	r.Use(chiMiddleware.RequestID)
+	r.Use(chiMiddleware.Recoverer)
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"status":  "healthy",
+			"status": "healthy",
 			"service": "gogate",
-			"port":    cfg.GatewayPort,
-			"routes":  rp.GetRoutes(),
+			"port": cfg.GatewayPort,
+			"routes": rp.GetRoutes(),
 		})
 	})
 
-	r.Mount("/users", rp.Handler("/users"))
+	r.Post("/auth/token", func(w http.ResponseWriter, r *http.Request) {
+		token, err := auth.GenerateToken("user-1", "test@example.com", "user", cfg.JWTSecret)
+		if err != nil {
+			http.Error(w, "failed to generate token", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{
+			"token": token,
+			"type": "Bearer",
+		})
+	})
+
+	r.Mount("/users", authMiddleware.Protect(rp.Handler("/users")) )
 	r.Mount("/products", rp.Handler("/products"))
-	r.Mount("/orders", rp.Handler("/orders"))
+	r.Mount("/orders", authMiddleware.Protect(rp.Handler("/orders")) )
 
 	log.Printf("GoGate starting on :%s", cfg.GatewayPort)
 	log.Printf("Loaded %d routes", len(rp.GetRoutes()))

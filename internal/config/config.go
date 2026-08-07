@@ -11,6 +11,7 @@ type Config struct {
 	AdminPort     string
 	RedisHost     string
 	RedisPort     string
+	RedisPassword string
 	EtcdEndpoints string
 	JWTSecret     string
 	AdminAPIKey   string
@@ -31,6 +32,7 @@ func Load() *Config {
 		AdminPort:     viper.GetString("ADMIN_PORT"),
 		RedisHost:     viper.GetString("REDIS_HOST"),
 		RedisPort:     viper.GetString("REDIS_PORT"),
+		RedisPassword: viper.GetString("REDIS_PASSWORD"),
 		EtcdEndpoints: viper.GetString("ETCD_ENDPOINTS"),
 		JWTSecret:     viper.GetString("JWT_SECRET"),
 		AdminAPIKey:   viper.GetString("ADMIN_API_KEY"),
