@@ -7,15 +7,17 @@ import (
 )
 
 type Route struct {
-	Path        string `yaml:"path"`
-	Upstream    string `yaml:"upstream"`
-	StripPrefix bool   `yaml:"strip_prefix"`
-	Timeout     int    `yaml:"timeout"`
-	Protected   bool   `yaml:"protected"`
+	Path        string `yaml:"path"` 
+	Upstream    string `yaml:"upstream"` 
+	StripPrefix bool   `yaml:"strip_prefix"` 
+	Timeout     int    `yaml:"timeout"` 
+	Protected   bool   `yaml:"protected"` 
+	RateLimit   int    `yaml:"rate_limit"` 
+	RateWindow  int    `yaml:"rate_window"` 
 }
 
 type RoutesConfig struct {
-	Routes []Route `yaml:"routes"`
+	Routes []Route `yaml:"routes"` 
 }
 
 type Upstream struct {
@@ -25,6 +27,8 @@ type Upstream struct {
 	StripPrefix bool
 	PathPrefix  string
 	Protected   bool
+	RateLimit   int
+	RateWindow  int
 }
 
 func NewUpstream(route Route) (*Upstream, error) {
@@ -32,10 +36,12 @@ func NewUpstream(route Route) (*Upstream, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid upstream URL %s: %w", route.Upstream, err)
 	}
+
 	timeout := time.Duration(route.Timeout) * time.Second
 	if timeout == 0 {
 		timeout = 30 * time.Second
 	}
+
 	return &Upstream{
 		URL:         parsedURL,
 		OriginalURL: route.Upstream,
@@ -43,5 +49,7 @@ func NewUpstream(route Route) (*Upstream, error) {
 		StripPrefix: route.StripPrefix,
 		PathPrefix:  route.Path,
 		Protected:   route.Protected,
+		RateLimit:   route.RateLimit,
+		RateWindow:  route.RateWindow,
 	}, nil
 }

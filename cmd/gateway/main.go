@@ -13,6 +13,7 @@ import (
 	"github.com/SOHAR-18/gogate/internal/auth"
 	"github.com/SOHAR-18/gogate/internal/config"
 	"github.com/SOHAR-18/gogate/internal/proxy"
+	"github.com/SOHAR-18/gogate/internal/ratelimit"
 )
 
 func main() {
@@ -40,6 +41,8 @@ func main() {
 		cfg.RedisPassword,
 	)
 
+	limiter := ratelimit.NewLimiter(cfg.RedisHost, cfg.RedisPort, cfg.RedisPassword)
+
 	r := chi.NewRouter()
 	r.Use(chiMiddleware.RequestID)
 	r.Use(chiMiddleware.Recoverer)
@@ -47,15 +50,16 @@ func main() {
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"status": "healthy",
+			"status":  "healthy",
 			"service": "gogate",
-			"port": cfg.GatewayPort,
-			"routes": rp.GetRoutes(),
+			"port":    cfg.GatewayPort,
+			"routes":  rp.GetRoutes(),
 		})
 	})
 
 	r.Post("/auth/token", func(w http.ResponseWriter, r *http.Request) {
-		token, err := auth.GenerateToken("user-1", "test@example.com", "user", cfg.JWTSecret)
+		token, err := auth.GenerateToken(
+			"user-1", "test@example.com", "user", cfg.JWTSecret)
 		if err != nil {
 			http.Error(w, "failed to generate token", http.StatusInternalServerError)
 			return
@@ -63,15 +67,24 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{
 			"token": token,
-			"type": "Bearer",
+			"type":  "Bearer",
 		})
 	})
 
-	r.Mount("/users", authMiddleware.Protect(rp.Handler("/users")) )
-	r.Mount("/products", rp.Handler("/products"))
-	r.Mount("/orders", authMiddleware.Protect(rp.Handler("/orders")) )
+	for _, route := range routesConfig.Routes {
+		path := route.Path
+		rl := ratelimit.NewMiddleware(limiter, route.RateLimit, route.RateWindow)
+		handler := rl.Limit(rp.Handler(path))
+
+		if route.Protected {
+			handler = authMiddleware.Protect(handler)
+		}
+
+		r.Mount(path, handler)
+		log.Printf("Mounted route: %s (protected=%v, limit=%d/%ds)",
+			path, route.Protected, route.RateLimit, route.RateWindow)
+	}
 
 	log.Printf("GoGate starting on :%s", cfg.GatewayPort)
-	log.Printf("Loaded %d routes", len(rp.GetRoutes()))
 	log.Fatal(http.ListenAndServe(":"+cfg.GatewayPort, r))
 }
