@@ -72,7 +72,9 @@ func (rr *RoundRobin) Next() (*Instance, error) {
 func (rr *RoundRobin) GetAll() []*Instance {
 	rr.mu.RLock()
 	defer rr.mu.RUnlock()
-	return rr.instances
+	result := make([]*Instance, len(rr.instances))
+	copy(result, rr.instances)
+	return result
 }
 
 func (rr *RoundRobin) SetHealthy(rawURL string, healthy bool) {
@@ -84,4 +86,32 @@ func (rr *RoundRobin) SetHealthy(rawURL string, healthy bool) {
 			return
 		}
 	}
+}
+
+func (rr *RoundRobin) AddInstance(u *url.URL, rawURL string) {
+	rr.mu.Lock()
+	defer rr.mu.Unlock()
+	for _, inst := range rr.instances {
+		if inst.RawURL == rawURL {
+			return
+		}
+	}
+	rr.instances = append(rr.instances, &Instance{
+		URL:     u,
+		RawURL:  rawURL,
+		Healthy: true,
+		Weight:  1,
+	})
+}
+
+func (rr *RoundRobin) RemoveInstance(rawURL string) {
+	rr.mu.Lock()
+	defer rr.mu.Unlock()
+	filtered := make([]*Instance, 0, len(rr.instances))
+	for _, inst := range rr.instances {
+		if inst.RawURL != rawURL {
+			filtered = append(filtered, inst)
+		}
+	}
+	rr.instances = filtered
 }

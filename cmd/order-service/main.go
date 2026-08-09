@@ -1,10 +1,16 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"strings"
+	"syscall"
 
+	"github.com/SOHAR-18/gogate/internal/discovery"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -23,16 +29,41 @@ var orders = map[string]Order{
 }
 
 func main() {
+	etcdEndpoints := os.Getenv("ETCD_ENDPOINTS")
+	serviceName := os.Getenv("SERVICE_NAME")
+	serviceURL := os.Getenv("SERVICE_URL")
+
+	if etcdEndpoints == "" {
+		etcdEndpoints = "localhost:2379"
+	}
+	if serviceName == "" {
+		serviceName = "order-service"
+	}
+	if serviceURL == "" {
+		serviceURL = "http://localhost:8083"
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	etcdClient, err := discovery.NewClient(strings.Split(etcdEndpoints, ","))
+	if err != nil {
+		log.Printf("[WARNING] Could not connect to etcd: %v", err)
+	} else {
+		if err := etcdClient.Register(ctx, serviceName, serviceURL); err != nil {
+			log.Printf("[WARNING] Could not register with etcd: %v", err)
+		}
+		defer etcdClient.Deregister(context.Background(), serviceName, serviceURL)
+	}
+
 	r := chi.NewRouter()
 
-	// GET /orders — return all orders
 	r.Get("/orders", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("X-Service", "order-service")
 		json.NewEncoder(w).Encode(orders)
 	})
 
-	// GET /orders/{id} — return one order
 	r.Get("/orders/{id}", func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
 		order, ok := orders[id]
@@ -45,7 +76,6 @@ func main() {
 		json.NewEncoder(w).Encode(order)
 	})
 
-	// Health check
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{
@@ -53,6 +83,14 @@ func main() {
 			"service": "order-service",
 		})
 	})
+
+	go func() {
+		sig := make(chan os.Signal, 1)
+		signal.Notify(sig, syscall.SIGTERM, syscall.SIGINT)
+		<-sig
+		log.Println("Shutting down order-service...")
+		cancel()
+	}()
 
 	log.Println("Order service starting on :8083")
 	log.Fatal(http.ListenAndServe(":8083", r))

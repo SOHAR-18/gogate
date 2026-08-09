@@ -1,10 +1,12 @@
 ﻿package main
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
@@ -12,6 +14,7 @@ import (
 
 	"github.com/SOHAR-18/gogate/internal/auth"
 	"github.com/SOHAR-18/gogate/internal/config"
+	"github.com/SOHAR-18/gogate/internal/discovery"
 	"github.com/SOHAR-18/gogate/internal/proxy"
 	"github.com/SOHAR-18/gogate/internal/ratelimit"
 )
@@ -32,6 +35,23 @@ func main() {
 	rp, err := proxy.NewReverseProxy(routesConfig)
 	if err != nil {
 		log.Fatalf("Failed to create reverse proxy: %v", err)
+	}
+
+	ctx := context.Background()
+	etcdEndpoints := strings.Split(cfg.EtcdEndpoints, ",")
+	etcdClient, err := discovery.NewClient(etcdEndpoints)
+	if err != nil {
+		log.Printf("[WARNING] etcd unavailable, skipping service discovery: %v", err)
+	} else {
+		registry := discovery.NewRegistry(etcdClient)
+		for _, route := range routesConfig.Routes {
+			lb := rp.GetBalancer(route.Path)
+			if lb != nil {
+				serviceName := route.ServiceName
+				registry.Watch(ctx, serviceName, lb)
+				log.Printf("[DISCOVERY] Watching service: %s", serviceName)
+			}
+		}
 	}
 
 	authMiddleware := auth.NewAuthMiddleware(
@@ -86,6 +106,28 @@ func main() {
 				})
 			}
 			result[route.Path] = instances
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(result)
+	})
+
+	r.Get("/admin/discovery", func(w http.ResponseWriter, r *http.Request) {
+		if etcdClient == nil {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]string{
+				"status": "etcd not connected",
+			})
+			return
+		}
+		result := map[string]interface{}{}
+		for _, route := range routesConfig.Routes {
+			serviceName := route.ServiceName
+			urls, err := etcdClient.GetServices(ctx, serviceName)
+			if err != nil {
+				result[serviceName] = map[string]string{"error": err.Error()}
+			} else {
+				result[serviceName] = urls
+			}
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(result)

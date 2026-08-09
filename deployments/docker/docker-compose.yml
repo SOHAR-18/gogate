@@ -1,8 +1,5 @@
-version: "3.9"
-
 services:
 
-  # ── Gateway ──────────────────────────────
   gateway:
     build:
       context: ../../
@@ -11,21 +8,30 @@ services:
       - "8080:8080"
     env_file:
       - ../../.env
+    environment:
+      - ETCD_ENDPOINTS=etcd:2379
+      - REDIS_HOST=redis
     depends_on:
       - user-service
       - product-service
       - order-service
       - redis
+      - etcd
     networks:
       - gogate-network
 
-  # ── Microservices ─────────────────────────
   user-service:
     build:
       context: ../../
       dockerfile: deployments/docker/Dockerfile.user
     ports:
       - "8081:8081"
+    environment:
+      - ETCD_ENDPOINTS=etcd:2379
+      - SERVICE_NAME=user-service
+      - SERVICE_URL=http://user-service:8081
+    depends_on:
+      - etcd
     networks:
       - gogate-network
 
@@ -35,6 +41,12 @@ services:
       dockerfile: deployments/docker/Dockerfile.product
     ports:
       - "8082:8082"
+    environment:
+      - ETCD_ENDPOINTS=etcd:2379
+      - SERVICE_NAME=product-service
+      - SERVICE_URL=http://product-service:8082
+    depends_on:
+      - etcd
     networks:
       - gogate-network
 
@@ -44,14 +56,31 @@ services:
       dockerfile: deployments/docker/Dockerfile.order
     ports:
       - "8083:8083"
+    environment:
+      - ETCD_ENDPOINTS=etcd:2379
+      - SERVICE_NAME=order-service
+      - SERVICE_URL=http://order-service:8083
+    depends_on:
+      - etcd
     networks:
       - gogate-network
 
-  # ── Redis ─────────────────────────────────
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
+    networks:
+      - gogate-network
+
+  etcd:
+    image: gcr.io/etcd-development/etcd:v3.5.9
+    ports:
+      - "2379:2379"
+    command:
+      - /usr/local/bin/etcd
+      - --advertise-client-urls=http://etcd:2379
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --data-dir=/etcd-data
     networks:
       - gogate-network
 

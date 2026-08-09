@@ -1,5 +1,6 @@
 ﻿routes:
   - path: /users
+    service_name: user-service
     upstreams:
       - http://user-service:8081
     protected: true
@@ -8,6 +9,7 @@
     health_path: /health
 
   - path: /products
+    service_name: product-service
     upstreams:
       - http://product-service:8082
     protected: false
@@ -16,6 +18,7 @@
     health_path: /health
 
   - path: /orders
+    service_name: order-service
     upstreams:
       - http://order-service:8083
     protected: true

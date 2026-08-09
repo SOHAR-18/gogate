@@ -7,6 +7,7 @@ import (
 
 type Route struct {
 	Path        string   `yaml:"path"`
+	ServiceName string   `yaml:"service_name"`
 	Upstreams   []string `yaml:"upstreams"`
 	StripPrefix bool     `yaml:"strip_prefix"`
 	Timeout     int      `yaml:"timeout"`
@@ -22,6 +23,7 @@ type RoutesConfig struct {
 
 type Upstream struct {
 	URLs        []string
+	ServiceName string
 	Timeout     time.Duration
 	StripPrefix bool
 	PathPrefix  string
@@ -46,8 +48,14 @@ func NewUpstream(route Route) (*Upstream, error) {
 		healthPath = "/health"
 	}
 
+	serviceName := route.ServiceName
+	if serviceName == "" {
+		serviceName = route.Path[1:]
+	}
+
 	return &Upstream{
 		URLs:        route.Upstreams,
+		ServiceName: serviceName,
 		Timeout:     timeout,
 		StripPrefix: route.StripPrefix,
 		PathPrefix:  route.Path,
