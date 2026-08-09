@@ -1,25 +1,24 @@
 ﻿routes:
-
   - path: /users
-    upstream: http://user-service:8081
-    strip_prefix: false
-    timeout: 30
+    upstreams:
+      - http://user-service:8081
     protected: true
     rate_limit: 10
     rate_window: 60
+    health_path: /health
 
   - path: /products
-    upstream: http://product-service:8082
-    strip_prefix: false
-    timeout: 30
+    upstreams:
+      - http://product-service:8082
     protected: false
     rate_limit: 30
     rate_window: 60
+    health_path: /health
 
   - path: /orders
-    upstream: http://order-service:8083
-    strip_prefix: false
-    timeout: 30
+    upstreams:
+      - http://order-service:8083
     protected: true
     rate_limit: 5
     rate_window: 60
+    health_path: /health

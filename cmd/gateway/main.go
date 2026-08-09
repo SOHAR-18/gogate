@@ -71,6 +71,26 @@ func main() {
 		})
 	})
 
+	r.Get("/admin/instances", func(w http.ResponseWriter, r *http.Request) {
+		result := map[string]interface{}{}
+		for _, route := range routesConfig.Routes {
+			lb := rp.GetBalancer(route.Path)
+			if lb == nil {
+				continue
+			}
+			instances := []map[string]interface{}{}
+			for _, inst := range lb.GetAll() {
+				instances = append(instances, map[string]interface{}{
+					"url":     inst.RawURL,
+					"healthy": inst.IsHealthy(),
+				})
+			}
+			result[route.Path] = instances
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(result)
+	})
+
 	for _, route := range routesConfig.Routes {
 		path := route.Path
 		rl := ratelimit.NewMiddleware(limiter, route.RateLimit, route.RateWindow)
@@ -81,8 +101,8 @@ func main() {
 		}
 
 		r.Mount(path, handler)
-		log.Printf("Mounted route: %s (protected=%v, limit=%d/%ds)",
-			path, route.Protected, route.RateLimit, route.RateWindow)
+		log.Printf("Mounted route: %s (protected=%v, limit=%d/%ds, upstreams=%d)",
+			path, route.Protected, route.RateLimit, route.RateWindow, len(route.Upstreams))
 	}
 
 	log.Printf("GoGate starting on :%s", cfg.GatewayPort)
