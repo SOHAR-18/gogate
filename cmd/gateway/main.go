@@ -17,10 +17,19 @@ import (
 	"github.com/SOHAR-18/gogate/internal/discovery"
 	"github.com/SOHAR-18/gogate/internal/proxy"
 	"github.com/SOHAR-18/gogate/internal/ratelimit"
+	"github.com/SOHAR-18/gogate/pkg/metrics"
+	"github.com/SOHAR-18/gogate/pkg/tracing"
 )
 
 func main() {
 	cfg := config.Load()
+
+	shutdown, err := tracing.Init("gogate", cfg.JaegerEndpoint)
+	if err != nil {
+		log.Printf("[WARNING] Tracing unavailable: %v", err)
+	} else {
+		defer shutdown()
+	}
 
 	routesData, err := os.ReadFile("configs/routes.yaml")
 	if err != nil {
@@ -65,6 +74,10 @@ func main() {
 	r := chi.NewRouter()
 	r.Use(chiMiddleware.RequestID)
 	r.Use(chiMiddleware.Recoverer)
+	r.Use(metrics.Middleware)
+	r.Use(tracing.Middleware)
+
+	r.Get("/metrics", metrics.Handler().ServeHTTP)
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

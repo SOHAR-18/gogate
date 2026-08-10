@@ -11,12 +11,14 @@ services:
     environment:
       - ETCD_ENDPOINTS=etcd:2379
       - REDIS_HOST=redis
+      - JAEGER_ENDPOINT=jaeger:4318
     depends_on:
       - user-service
       - product-service
       - order-service
       - redis
       - etcd
+      - jaeger
     networks:
       - gogate-network
 
@@ -81,6 +83,36 @@ services:
       - --advertise-client-urls=http://etcd:2379
       - --listen-client-urls=http://0.0.0.0:2379
       - --data-dir=/etcd-data
+    networks:
+      - gogate-network
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ../../deployments/docker/prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - gogate-network
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - prometheus
+    networks:
+      - gogate-network
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "16686:16686"
+      - "4318:4318"
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
     networks:
       - gogate-network
 
