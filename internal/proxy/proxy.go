@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/SOHAR-18/gogate/internal/circuitbreaker"
 	"github.com/SOHAR-18/gogate/internal/loadbalancer"
 	"github.com/SOHAR-18/gogate/internal/middleware"
 )
@@ -18,12 +19,15 @@ import (
 type ReverseProxy struct {
 	routes     map[string]*Upstream
 	balancers  map[string]*loadbalancer.RoundRobin
+	cbManager  *circuitbreaker.Manager
 	middleware middleware.Middleware
 }
 
 func NewReverseProxy(routesConfig RoutesConfig) (*ReverseProxy, error) {
 	routes := make(map[string]*Upstream)
 	balancers := make(map[string]*loadbalancer.RoundRobin)
+
+	cbManager := circuitbreaker.NewManager(circuitbreaker.DefaultSettings())
 
 	for _, route := range routesConfig.Routes {
 		upstream, err := NewUpstream(route)
@@ -47,6 +51,7 @@ func NewReverseProxy(routesConfig RoutesConfig) (*ReverseProxy, error) {
 	return &ReverseProxy{
 		routes:     routes,
 		balancers:  balancers,
+		cbManager:  cbManager,
 		middleware: middleware.DefaultChain(),
 	}, nil
 }
@@ -110,7 +115,8 @@ func (rp *ReverseProxy) Handler(pathPrefix string) http.Handler {
 		proxy.ServeHTTP(w, r)
 	})
 
-	return rp.middleware(coreHandler)
+	cbWrapped := rp.cbManager.Wrap(pathPrefix, coreHandler)
+	return rp.middleware(cbWrapped)
 }
 
 func (rp *ReverseProxy) GetRoutes() []string {
@@ -123,6 +129,10 @@ func (rp *ReverseProxy) GetRoutes() []string {
 
 func (rp *ReverseProxy) GetBalancer(path string) *loadbalancer.RoundRobin {
 	return rp.balancers[path]
+}
+
+func (rp *ReverseProxy) GetCircuitBreakerManager() *circuitbreaker.Manager {
+	return rp.cbManager
 }
 
 func writeError(w http.ResponseWriter, status int, message string) {

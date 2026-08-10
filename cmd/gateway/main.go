@@ -41,15 +41,14 @@ func main() {
 	etcdEndpoints := strings.Split(cfg.EtcdEndpoints, ",")
 	etcdClient, err := discovery.NewClient(etcdEndpoints)
 	if err != nil {
-		log.Printf("[WARNING] etcd unavailable, skipping service discovery: %v", err)
+		log.Printf("[WARNING] etcd unavailable: %v", err)
 	} else {
 		registry := discovery.NewRegistry(etcdClient)
 		for _, route := range routesConfig.Routes {
 			lb := rp.GetBalancer(route.Path)
 			if lb != nil {
-				serviceName := route.ServiceName
-				registry.Watch(ctx, serviceName, lb)
-				log.Printf("[DISCOVERY] Watching service: %s", serviceName)
+				registry.Watch(ctx, route.ServiceName, lb)
+				log.Printf("[DISCOVERY] Watching service: %s", route.ServiceName)
 			}
 		}
 	}
@@ -121,12 +120,28 @@ func main() {
 		}
 		result := map[string]interface{}{}
 		for _, route := range routesConfig.Routes {
-			serviceName := route.ServiceName
-			urls, err := etcdClient.GetServices(ctx, serviceName)
+			urls, err := etcdClient.GetServices(ctx, route.ServiceName)
 			if err != nil {
-				result[serviceName] = map[string]string{"error": err.Error()}
+				result[route.ServiceName] = map[string]string{"error": err.Error()}
 			} else {
-				result[serviceName] = urls
+				result[route.ServiceName] = urls
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(result)
+	})
+
+	r.Get("/admin/circuit-breakers", func(w http.ResponseWriter, r *http.Request) {
+		cbManager := rp.GetCircuitBreakerManager()
+		result := map[string]interface{}{}
+		for name, breaker := range cbManager.GetAll() {
+			counts := breaker.Counts()
+			result[name] = map[string]interface{}{
+				"state":                string(breaker.State()),
+				"total_requests":       counts.TotalSuccesses + counts.TotalFailures,
+				"total_successes":      counts.TotalSuccesses,
+				"total_failures":       counts.TotalFailures,
+				"consecutive_failures": counts.ConsecutiveFailures,
 			}
 		}
 		w.Header().Set("Content-Type", "application/json")

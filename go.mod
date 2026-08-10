@@ -6,6 +6,7 @@ require (
 	github.com/go-chi/chi/v5 v5.3.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/redis/go-redis/v9 v9.22.0
+	github.com/sony/gobreaker v1.0.0
 	github.com/spf13/viper v1.21.0
 	go.etcd.io/etcd/client/v3 v3.7.1
 	gopkg.in/yaml.v3 v3.0.1
