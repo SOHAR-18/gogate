@@ -42,6 +42,13 @@ func (m *Manager) GetOrCreate(name string) *Breaker {
 	return b
 }
 
+func (m *Manager) Reset(name string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.breakers, name)
+	log.Printf("[CIRCUIT BREAKER] Reset: %s", name)
+}
+
 func (m *Manager) GetAll() map[string]*Breaker {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

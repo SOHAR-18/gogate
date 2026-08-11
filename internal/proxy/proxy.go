@@ -9,6 +9,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/SOHAR-18/gogate/internal/circuitbreaker"
@@ -21,6 +22,7 @@ type ReverseProxy struct {
 	balancers  map[string]*loadbalancer.RoundRobin
 	cbManager  *circuitbreaker.Manager
 	middleware middleware.Middleware
+	mu         sync.RWMutex
 }
 
 func NewReverseProxy(routesConfig RoutesConfig) (*ReverseProxy, error) {
@@ -131,8 +133,60 @@ func (rp *ReverseProxy) GetBalancer(path string) *loadbalancer.RoundRobin {
 	return rp.balancers[path]
 }
 
+func (rp *ReverseProxy) GetAllBalancers() map[string]*loadbalancer.RoundRobin {
+	return rp.balancers
+}
+
 func (rp *ReverseProxy) GetCircuitBreakerManager() *circuitbreaker.Manager {
 	return rp.cbManager
+}
+
+func (rp *ReverseProxy) AddRoute(route Route) error {
+	rp.mu.Lock()
+	defer rp.mu.Unlock()
+
+	if _, exists := rp.routes[route.Path]; exists {
+		return fmt.Errorf("route already exists: %s", route.Path)
+	}
+
+	upstream, err := NewUpstream(route)
+	if err != nil {
+		return err
+	}
+
+	lb, err := loadbalancer.NewRoundRobin(route.Upstreams)
+	if err != nil {
+		return fmt.Errorf("failed to create load balancer for %s: %w", route.Path, err)
+	}
+
+	rp.routes[route.Path] = upstream
+	rp.balancers[route.Path] = lb
+
+	// Start health checking for the new route.
+	hc := loadbalancer.NewHealthChecker(lb, upstream.HealthPath)
+	hc.Start()
+
+	// Create the circuit breaker for the new route.
+	rp.cbManager.GetOrCreate(route.Path)
+
+	log.Printf("[RUNTIME ROUTE] Added route: %s -> %v", route.Path, route.Upstreams)
+
+	return nil
+}
+func (rp *ReverseProxy) RemoveRoute(path string) error {
+	rp.mu.Lock()
+	defer rp.mu.Unlock()
+
+	if _, exists := rp.routes[path]; !exists {
+		return fmt.Errorf("route not found: %s", path)
+	}
+
+	delete(rp.routes, path)
+	delete(rp.balancers, path)
+
+	log.Printf("[RUNTIME ROUTE] Removed route: %s", path)
+
+	return nil
 }
 
 func writeError(w http.ResponseWriter, status int, message string) {

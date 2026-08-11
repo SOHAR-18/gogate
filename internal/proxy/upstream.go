@@ -6,15 +6,15 @@ import (
 )
 
 type Route struct {
-	Path        string   `yaml:"path"`
-	ServiceName string   `yaml:"service_name"`
-	Upstreams   []string `yaml:"upstreams"`
-	StripPrefix bool     `yaml:"strip_prefix"`
-	Timeout     int      `yaml:"timeout"`
-	Protected   bool     `yaml:"protected"`
-	RateLimit   int      `yaml:"rate_limit"`
-	RateWindow  int      `yaml:"rate_window"`
-	HealthPath  string   `yaml:"health_path"`
+	Path        string   `yaml:"path" json:"path"`
+	ServiceName string   `yaml:"service_name" json:"service_name"`
+	Upstreams   []string `yaml:"upstreams" json:"upstreams"`
+	StripPrefix bool     `yaml:"strip_prefix" json:"strip_prefix"`
+	Timeout     int      `yaml:"timeout" json:"timeout"`
+	Protected   bool     `yaml:"protected" json:"protected"`
+	RateLimit   int      `yaml:"rate_limit" json:"rate_limit"`
+	RateWindow  int      `yaml:"rate_window" json:"rate_window"`
+	HealthPath  string   `yaml:"health_path" json:"health_path"`
 }
 
 type RoutesConfig struct {
